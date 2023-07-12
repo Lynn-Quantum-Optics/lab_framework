@@ -217,6 +217,31 @@ def fit(func:Union[str,'function'], x:np.ndarray, y:np.ndarray, full_covm:bool=F
     else:
         return unp.uarray(popt, np.sqrt(np.diag(pcov)))
 
+def plot_errorbars(x:np.ndarray, y:np.ndarray, ax:plt.Axes=None, **kwargs) -> matplotlib.container.ErrorbarContainer:
+    ''' Plot errorbar data using ufloats.
+    
+    Parameters
+    ----------
+    x : np.ndarray
+        X values.
+    y : np.ndarray
+        Y values and uncertainties in the form of a uarray.
+    ax : plt.Axes, optional
+        Axes to plot on, by default the current axes will be used.
+    **kwargs : dict
+        Additional arguments for plt/ax.errorbar().
+    
+    Returns
+    -------
+    matplotlib.container.ErrorbarContainer
+        The errorbar container.
+    '''
+    # get axes
+    if ax is None:
+        ax = plt.gca()
+    # plot the data
+    return ax.errorbar(x=x, y=unp.nominal_values(y), yerr=unp.std_devs(y), **kwargs)
+
 def plot_func(func:Union[str,'function'], args:np.ndarray, x:Union[tuple,np.ndarray], ax:plt.Axes=None, num_points:int=300, **kwargs) -> matplotlib.lines.Line2D:
     ''' Plot a function
     
@@ -234,6 +259,11 @@ def plot_func(func:Union[str,'function'], args:np.ndarray, x:Union[tuple,np.ndar
         Number of points to plot, by default 300.
     **kwargs : dict
         Additional arguments for plt/ax.plot().
+    
+    Returns
+    -------
+    matplotlib.lines.Line2D
+        The line object.
     '''
     # get axes
     if ax is None:

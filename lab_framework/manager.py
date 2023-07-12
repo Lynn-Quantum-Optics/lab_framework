@@ -238,7 +238,7 @@ class Manager:
         ''' Clear (erase) the data in the current output data frame. '''
         self.log('Clearing output data.')
         # just create a brand new output data frame
-        self._output_data = {x:[] for x in self._config['channel_keys']}
+        self._output_data = {x:[] for x in self.df_columns}
 
     def output_data(self, output_file:str=None, clear_data:bool=True) -> pd.DataFrame:
         ''' Saves the output data to a specified file csv file.
