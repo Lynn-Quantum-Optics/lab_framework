@@ -98,6 +98,17 @@ def sin2_sq(x:np.ndarray, a:float, b:float, c:float) -> np.ndarray:
 
     return a * (np.sin(np.deg2rad(2*x + b)))**2 + c
 
+def cos2_sq(x:np.ndarray, a:float, b:float, c:float) -> np.ndarray:
+    ''' Cos(2x)^2 fit function
+
+    Returns
+    -------
+    float
+        a * cos^2(2*x + b) + c
+    '''
+
+    return a * (np.cos(np.deg2rad(2*x + b)))**2 + c
+
 def quartic(x:np.ndarray, a:float, b:float, c:float, d:float, e:float) -> np.ndarray:
     ''' A quartic polynomial fit function
 
@@ -123,6 +134,7 @@ FIT_FUNCS = {
     'cos2': cos2,
     'sec': sec,
     'sin2_sq': sin2_sq,
+    'cos2_sq': cos2_sq,
     'quartic': quartic
 }
 
