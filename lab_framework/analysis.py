@@ -229,7 +229,7 @@ def fit(func:Union[str,'function'], x:np.ndarray, y:np.ndarray, full_covm:bool=F
     else:
         return unp.uarray(popt, np.sqrt(np.diag(pcov)))
 
-def plot_errorbars(x:np.ndarray, y:np.ndarray, ax:plt.Axes=None, **kwargs) -> matplotlib.container.ErrorbarContainer:
+def plot_errorbar(x:np.ndarray, y:np.ndarray, ax:plt.Axes=None, **kwargs) -> matplotlib.container.ErrorbarContainer:
     ''' Plot errorbar data using ufloats.
     
     Parameters
