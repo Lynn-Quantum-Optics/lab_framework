@@ -177,11 +177,11 @@ class Manager:
 
     @property
     def df_columns(self) -> str:
-        return ['start', 'stop', 'num_samp', 'samp_period'] + self._config['motors'].keys() + self._config['channel_keys'] + ['note']
+        return ['start', 'stop', 'num_samp', 'samp_period'] + [k for k in self._config['motors'].keys()] + self._config['channel_keys'] + ['note']
 
     @property
     def csv_columns(self) -> str:
-        return ['start', 'stop', 'num_samp', 'samp_period'] + self._config['motors'].keys() + self._config['channel_keys'] + [f'{k}_SEM' for k in self._config['channel_keys']] + ['note']
+        return ['start', 'stop', 'num_samp', 'samp_period'] + [k for k in self._config['motors'].keys()] + self._config['channel_keys'] + [f'{k}_SEM' for k in self._config['channel_keys']] + ['note']
 
     # +++ initialization methods +++
 
