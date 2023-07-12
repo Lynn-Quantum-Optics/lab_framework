@@ -70,8 +70,11 @@ class Motor:
     
     @property
     def pos(self) -> float:
-        ''' The position of this motor, in degrees. '''
-        return self._pos
+        ''' The position of this motor, in degrees. This will be between -180 and 180. '''
+        if 0 <= self._pos <= 180:
+            return self._pos
+        else:
+            return self._pos - 360
     
     @property
     def true_position(self) -> float:
