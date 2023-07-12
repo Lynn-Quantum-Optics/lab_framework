@@ -263,7 +263,7 @@ class Manager:
             self.log(f'Saving data to "{output_file}".')
             csv_df = Manager.reformat_ufloat_to_float(df)
             csv_df = csv_df[self.csv_columns]
-            csv_df.to_csv(output_file)
+            csv_df.to_csv(output_file, index=False)
         
         # clear the output data
         if clear_data:
@@ -476,8 +476,8 @@ class Manager:
             for port in self._active_ports.values():
                 port.close()
         # output data
-        if len(self._output_df) != 0:
-            self.log(f'WARNING: Shutting down with {len(self._output_df)} rows of (potentially) unsaved data.')
+        if len(self._output_data['start']) != 0:
+            self.log(f'WARNING: Shutting down with {len(self._output_data["start"])} rows of (potentially) unsaved data.')
         # CCU
         self.log('Closing CCU.')
         self._ccu.shutdown()
