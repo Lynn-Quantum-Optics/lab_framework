@@ -14,7 +14,7 @@ setup(
         'matplotlib',
         'uncertainties', 
         'scipy',
-        'serial',
+        'pyserial',
         'tqdm',
         'thorlabs_apt'
     ]
