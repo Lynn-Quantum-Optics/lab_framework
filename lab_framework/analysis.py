@@ -315,7 +315,7 @@ def find_ratio(func1:Union[str,'function'], args1:np.ndarray, func2:Union[str,'f
         return np.abs((1-pct_1)*eval(func1, x_, *args1_) - pct_1*eval(func2, x_, *args2_))
     
     # minimize it!
-    res = opt.minimize(min_me, guess, args=(args1, args2), bounds=((x_min, x_max),))
+    res = opt.brute(min_me, args=(args1, args2), ranges=((x_min, x_max),))
     
     # obtain the result
     return res.x[0]
