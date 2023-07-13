@@ -284,7 +284,7 @@ def plot_func(func:Union[str,'function'], args:np.ndarray, x:Union[tuple,np.ndar
     x = np.linspace(np.min(x), np.max(x), num_points)
     return ax.plot(x, eval(func, x, *args), **kwargs)
 
-def find_ratio(func1:Union[str,'function'], args1:np.ndarray, func2:Union[str,'function'], args2:np.ndarray, pct_1:float, x:Union[tuple,np.ndarray], guess:float=None):
+def find_ratio(func1:Union[str,'function'], args1:np.ndarray, func2:Union[str,'function'], args2:np.ndarray, pct_1:float, x:Union[tuple,np.ndarray]):
     ''' Find where the two functions satisfy func1(x) / (func1(x) + func2(x)) = pct_1
 
     Parameters
@@ -306,19 +306,19 @@ def find_ratio(func1:Union[str,'function'], args1:np.ndarray, func2:Union[str,'f
     '''
     # get the range
     x_min, x_max = np.min(x), np.max(x)
-    # get the initial guess
-    if guess is None:
-        guess = (x_min + x_max) / 2
     
     # define the function to minimize
     def min_me(x_:np.ndarray, args1_:tuple, args2_:tuple) -> float:
         return np.abs((1-pct_1)*eval(func1, x_, *args1_) - pct_1*eval(func2, x_, *args2_))
     
     # minimize it!
-    res = opt.brute(min_me, args=(args1, args2), ranges=((x_min, x_max),))
+    res = opt.brute(min_me, args=(args1, args2), ranges=((x_min, x_max),))[0]
     
-    # obtain the result
-    return res.x[0]
+    # print a warning if the edge is at a boundary
+    if (abs(x-x_min) < 1e-3) or (abs(x-x_max) < 1e-3):
+        print('WARNING: analysis.find_ratio picked a value at the edge of a range.')
+
+    return res
 
 def find_value(func:Union[str,'function'], args:tuple, target:float, x:np.ndarray, guess:float=None):
     ''' Find where the function equals a target value.
@@ -339,16 +339,15 @@ def find_value(func:Union[str,'function'], args:tuple, target:float, x:np.ndarra
     # get bounds
     x_min, x_max = np.min(x), np.max(x)
     
-    # get the initial guess
-    if guess is None:
-        guess = (x_min + x_max) / 2
-
     # define the function to minimize
     def min_me(x_, args_) -> float:
         return np.abs(eval(func, x_, *args_) - target)
     
     # minimize it
-    res = opt.minimize(min_me, x0=guess, args=(args,), bounds=((x_min, x_max),))
+    res = opt.brute(min_me, args=(args,), ranges=((x_min, x_max),))[0]
 
-    # return the x value that minimizes it
-    return res.x[0]
+    # print a warning if x is at an edge
+    if (abs(res-x_min) < 1e-3) or (abs(res-x_max) < 1e-3):
+        print('WARNING: analysis.find_ratio picked a value at the edge of a range.')
+    
+    return res
