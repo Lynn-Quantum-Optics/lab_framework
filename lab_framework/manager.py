@@ -447,11 +447,12 @@ class Manager:
         # open output
         out = []
         # loop to perform the sweep
-        for pos in tqdm(np.linspace(pos_min, pos_max, num_steps)):
+        positions = np.linspace(pos_min, pos_max, num_steps)
+        for pos in tqdm(positions):
             self.configure_motors(**{component:pos})
             x = self.take_data(num_samp, samp_period, Manager.MAIN_CHANNEL)
             out.append(x)
-        return np.array(out)
+        return positions, np.array(out)
 
     # +++ shutdown methods +++
 
