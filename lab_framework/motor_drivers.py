@@ -217,7 +217,7 @@ class Motor:
         Returns
         -------
         float
-            The position of the motor in degrees.
+            The position of the motor in degrees (including config offset).
         '''
         # try to home the motor
         abs_pos = self._set_position(0)
