@@ -77,9 +77,14 @@ class Motor:
             return self._pos - 360
     
     @property
+    def nonneg_pos(self) -> float:
+        ''' Position of the motor in degrees, always between 0 and 360. '''
+        return self._pos
+
+    @property
     def true_position(self) -> float:
-        ''' The true position of this motor, in degrees. '''
-        return self._pos + self._offset
+        ''' The true position of this motor, in degrees. This will always be non-negative (between 0 and 360). '''
+        return (self._pos + self._offset) % 360
 
     @property
     def is_active(self) -> bool:
@@ -177,7 +182,7 @@ class Motor:
         # restrict the range of self._pos
         self._pos = (self._pos % (360))
 
-        return self._pos
+        return self.pos
 
     def move(self, angle_degrees:float) -> float:
         ''' Moves the motor by an angle RELATIVE to it's current position
@@ -194,7 +199,7 @@ class Motor:
         '''
         # use the sub method
         self._pos = self._move_relative(angle_degrees) - self._offset
-        return self._pos
+        return self.pos
 
     def zero(self) -> float:
         ''' Returns this motor to it's zero position.
@@ -214,17 +219,14 @@ class Motor:
         float
             The position of the motor in degrees.
         '''
-        # try to 
+        # try to home the motor
         abs_pos = self._set_position(0)
-        # handle output
+        # raise any error
         if not isinstance(abs_pos, float):
-            # get the position
-            self._pos = self._get_position(0) - self._offset
-            # raise error
             raise RuntimeError(f'Error homing {self.name}: {abs_pos}')
-        else:
-            self._pos = self._set_position(0) - self._offset
-            return self._pos
+        # update and return the position
+        self._pos = (abs_pos - self._offset) % 360
+        return self.pos
 
 # subclasses of 
 
