@@ -465,9 +465,15 @@ class Manager:
             self.log('WARNING: No motors are active.')
         else:
             # loop to delete motors
-            self.log('Deleting motor objects.')
+            self.log('Shutting down motor objects.')
             for motor_name in self._motors:
-                del self.__dict__[motor_name]
+                # get the motor object
+                motor = self.__dict__[motor_name]
+                # return to home position
+                motor.hardware_home()
+                self.log(f'{motor.name} returned to true position {motor.true_position} degrees.')
+                self.log(f'Deleting {motor.name} object.')
+                del self.__dict__.pop(motor_name)
         # com ports
         if len(self._active_ports) == 0:
             self.log('WARNING: No com ports are active.')
