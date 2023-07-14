@@ -301,8 +301,6 @@ def find_ratio(func1:Union[str,'function'], args1:np.ndarray, func2:Union[str,'f
         Percentage of the first function.
     x : Union[tuple,np.ndarray]
         X values, the search will be limited within the minimum and maximum of this range.
-    guess : float, optional
-        Initial guess for the x value, by default average of the minimum and maximum of x.
     '''
     # get the range
     x_min, x_max = np.min(x), np.max(x)
@@ -320,7 +318,7 @@ def find_ratio(func1:Union[str,'function'], args1:np.ndarray, func2:Union[str,'f
 
     return res
 
-def find_value(func:Union[str,'function'], args:tuple, target:float, x:np.ndarray, guess:float=None):
+def find_value(func:Union[str,'function'], args:tuple, target:float, x:np.ndarray):
     ''' Find where the function equals a target value.
 
     Parameters
@@ -333,8 +331,6 @@ def find_value(func:Union[str,'function'], args:tuple, target:float, x:np.ndarra
         Target value to hit.
     x : np.ndarray
         X values, the search will be limited within the minimum and maximum of this range.
-    guess : float, optional
-        Initial guess for the x value, by default average of the minimum and maximum of x.    
     '''
     # get bounds
     x_min, x_max = np.min(x), np.max(x)
