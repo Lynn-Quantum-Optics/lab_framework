@@ -38,7 +38,7 @@ class Motor:
 
         # keeping the position of the motor in local memory
         # this is the virtual position, after offset is applied
-        self._pos = self._get_position() - self._offset
+        self._pos = (self._get_position() - self._offset) % 360
 
     # +++ basic methods +++
 
