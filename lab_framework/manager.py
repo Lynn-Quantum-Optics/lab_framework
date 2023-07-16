@@ -473,7 +473,7 @@ class Manager:
                 motor.hardware_home()
                 self.log(f'{motor.name} returned to true position {motor.true_position} degrees.')
                 self.log(f'Deleting {motor.name} object.')
-                del self.__dict__.pop(motor_name)
+                del self.__dict__[motor_name]
         # com ports
         if len(self._active_ports) == 0:
             self.log('WARNING: No com ports are active.')
