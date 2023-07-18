@@ -174,7 +174,13 @@ class Motor:
             The position of the motor in degrees.
         '''
         # calculate the set point
-        set_point = (angle_degrees + self._offset) % (360)
+        set_point = (angle_degrees + self._offset)
+        
+        # bound set point to ±360º
+        if set_point <= -360:
+            set_point += 360
+        elif set_point >= 360:
+            set_point -= 360
 
         # update the position, returning it as well
         self._pos = self._set_position(set_point) - self._offset
