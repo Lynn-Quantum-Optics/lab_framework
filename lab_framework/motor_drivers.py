@@ -342,7 +342,7 @@ class ElliptecMotor(Motor):
         )
         # get travel and ppmu
         self._travel = int(resp[21:25], 16) # should be 360º
-        self._ppmu = int(int(resp[25:33], 16)/self._travel)
+        self._ppmu = int(resp[25:33], 16)/self._travel
         return None
 
     def _degrees_to_bytes(self, angle_degrees:float, num_bytes:int=8) -> bytes:
