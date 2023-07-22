@@ -10,7 +10,7 @@ Author(s):
 # python imports
 from time import sleep
 import serial
-from typing import Union
+from typing import Union, Tuple
 
 # package imports
 import thorlabs_apt as apt
@@ -33,12 +33,11 @@ class Motor:
     def __init__(self, name:str, typ:str, offset:float=0):
         # set attributes
         self._name = name
-        self._typ = typ
+        self._type = typ
         self._offset = offset
 
         # keeping the position of the motor in local memory
-        # this is the virtual position, after offset is applied
-        self._pos = (self._get_position() - self._offset) % 360
+        self._hardware_pos = None
 
     # +++ basic methods +++
 
@@ -58,33 +57,59 @@ class Motor:
     @property
     def type(self) -> str:
         ''' The motor type. '''
-        return self._typ
+        return self._type
 
     @property
     def offset(self) -> float:
-        ''' The zero position of this motor, in degrees.
-        
-        i.e. when we say the motor is at zero, where does it actually think it is
-        '''
+        ''' The zero position of this motor, in degrees. When pos returns zero, hardware_pos will return the offset. '''
         return self._offset
     
     @property
     def pos(self) -> float:
-        ''' The position of this motor, in degrees. This will be between -180 and 180. '''
-        if 0 <= self._pos <= 180:
-            return self._pos
-        else:
-            return self._pos - 360
-    
-    @property
-    def nonneg_pos(self) -> float:
-        ''' Position of the motor in degrees, always between 0 and 360. '''
-        return self._pos
+        ''' The position of this motor relative to the offset position, in degrees. This value is clipped between -180 and 180. 
+        
+        Note that this will block if the motor is currently moving.
+        '''
+        # wait to finish moving
+        if self._hardware_pos is None:
+            while self.is_active:
+                sleep(0.05)
+            self._update_position()
+        # return the position relative to the offset
+        p = self._hardware_pos - self._offset
+        while (p <= -180):
+            p += 360
+        while (p > 180):
+            p -= 360
+        return p
 
     @property
-    def true_position(self) -> float:
-        ''' The true position of this motor, in degrees. This will always be non-negative (between 0 and 360). '''
-        return (self._pos + self._offset) % 360
+    def unbound_pos(self) -> float:
+        ''' The position of this motor relative to the offset position. This value will not be bound, and may be anywhere in the setpoint range.
+        
+        Note that this will block if the motor is currently moving.
+        '''
+        # wait to finish moving
+        if self._hardware_pos is None:
+            while self.is_active:
+                sleep(0.05)
+            self._update_position()
+        # return the position relative to the offset
+        return self._hardware_pos - self._offset
+
+    @property
+    def hardware_pos(self) -> float:
+        ''' The position of the motor relative to the hardware home position.
+        
+        Note that this will block if the motor is currently moving.
+        '''
+        # wait to finish moving
+        if self._hardware_pos is None:
+            while self.is_active:
+                sleep(0.05)
+            self._update_position()
+        # return the hardware position
+        return self._hardware_pos
 
     @property
     def is_active(self) -> bool:
@@ -96,45 +121,34 @@ class Motor:
         ''' Gets the status of the motor (physical/firmware). '''
         return self._get_status()
 
+    @property
+    def setpoint_range(self) -> Tuple[int, int]:
+        ''' The range of angles that are valid set points for this motor. Angles outside of this range will have a multiple of 360 added to them to bring them into this range.
+        
+        Returns
+        -------
+        Tuple[int, int]
+            The range of angles (min, max) that are valid set points for this motor.
+        '''
+        return (-359.99 - self.offset, 359.99 - self.offset)
+
     # +++ private methods to be overridden +++
 
-    def _get_position(self) -> float:
-        ''' Gets the position of the motor in degrees
-
-        Returns
-        -------
-        float
-            The position of the motor in degrees.
-        '''
+    def _update_position(self) -> None:
+        ''' Updates the position of the motor in local memory. '''
         raise NotImplementedError
     
-    def _set_position(self, angle_degrees:float) -> float:
-        ''' Sets the position of the motor in degrees
+    def _set_position(self, angle_degrees:float, block:bool=True) -> None:
+        ''' Sets the position of the motor in degrees.
+
+        If blocking, this will also update the position of the motor in local memory.
 
         Parameters
         ----------
         angle_degrees : float
             The position to set the motor to, in degrees.
-        
-        Returns
-        -------
-        float
-            The position of the motor in degrees.
-        '''
-        raise NotImplementedError
-
-    def _move_relative(self, angle_degrees:float) -> float:
-        ''' Moves the motor by an angle relative to it's current position
-
-        Parameters
-        ----------
-        angle_degrees : float
-            The position to set the motor to, in degrees.
-        
-        Returns
-        -------
-        float
-            The position of the motor in degrees.
+        block : bool (optional, default=True)
+            Whether or not to block until the motor has reached the set point.
         '''
         raise NotImplementedError
 
@@ -160,52 +174,44 @@ class Motor:
 
     # +++ public methods +++
 
-    def goto(self, angle_degrees:float) -> float:
+    def goto(self, angle_degrees:float, block:bool=True) -> Union[float, None]:
         ''' Sets the angle of the motor in degrees
 
         Parameters
         ----------
         angle_degrees : float
             The angle to set the motor to, in degrees.
-        
+        block : bool (optional, default=True)
+            Whether or not to block until the motor has reached the set point.
+
         Returns
         -------
         float
             The position of the motor in degrees.
+
+        or
+        
+        None
+            If non-blocking.
         '''
-        # calculate the set point
+        # calculate the actual set point
         set_point = (angle_degrees + self._offset)
-        
-        # bound set point to ±360º
-        if set_point <= -360:
+        # bound the set point
+        smin, smax = self.setpoint_range
+        while set_point < smin:
             set_point += 360
-        elif set_point >= 360:
+        while set_point > smax:
             set_point -= 360
-
-        # update the position, returning it as well
-        self._pos = self._set_position(set_point) - self._offset
-
-        # restrict the range of self._pos
-        self._pos = (self._pos % (360))
-
-        return self.pos
-
-    def move(self, angle_degrees:float) -> float:
-        ''' Moves the motor by an angle RELATIVE to it's current position
-
-        Parameters
-        ----------
-        angle_degrees : float
-            The angle to move the motor by, in degrees.
         
-        Returns
-        -------
-        float
-            The position of the motor in degrees.
-        '''
-        # use the sub method
-        self._pos = self._move_relative(angle_degrees) - self._offset
-        return self.pos
+        # move the motor
+        self._set_position(set_point, block=block)
+
+        # return based on blocking
+        if not block:
+            self._hardware_pos = None
+            return None
+        else:
+            return self.pos
 
     def zero(self) -> float:
         ''' Returns this motor to it's zero position.
@@ -217,22 +223,25 @@ class Motor:
         '''
         return self.goto(0)
     
-    def hardware_home(self) -> float:
+    def hardware_home(self, block:bool=True) -> Union[float, None]:
         ''' Returns this motor to it's home position as saved in the hardware's memory.
+        
+        Parameters
+        ----------
+        block : bool (optional, default=True)
+            If True, blocks until the motor has reached the home position.
         
         Returns
         -------
         float
             The position of the motor in degrees (including config offset).
+        
+        or
+
+        None
+            If non-blocking.
         '''
-        # try to home the motor
-        abs_pos = self._set_position(0)
-        # raise any error
-        if not isinstance(abs_pos, float):
-            raise RuntimeError(f'Error homing {self.name}: {abs_pos}')
-        # update and return the position
-        self._pos = (abs_pos - self._offset) % 360
-        return self.pos
+        return self._set_position(0, block=block)
 
 # subclasses of 
 
@@ -370,51 +379,26 @@ class ElliptecMotor(Motor):
         # convert to bytes
         return hexPulses.encode('utf-8')
 
-    def _get_home_offset(self) -> int:
-        ''' Get the home offset of the motor.
+    def _decode_position(self, resp:bytes) -> float:
+        ''' Decodes a position response from the device. 
         
-        Returns
-        -------
-        int
-            The home offset of the motor, in pulses.
-        '''
-        resp = self._send_instruction(b'go', require_resp_len=11, require_resp_code=b'ho')[3:11]
-        pos = int(resp[3:11], 16)
-        # check negative
-        if (pos >> 31) & 1:
-            # negative number, take the two's compliment
-            pos = -((pos ^ 0xffffffff) + 1)
-        return pos
-
-    def _set_hardware_home_offset(self) -> float:
-        ''' Sets the hardware home to be the current position.
-        [WARNING: THIS WILL RESET HOME ON THE PHYSICAL HARDWARE. THIS CANNOT BE UNDONE, UNLESS YOU KNOW THE ORIGINAL HOME OFFSET.]
+        Parameters
+        ----------
+        resp : bytes
+            The response from the device to decode.
 
         Returns
         -------
         float
-            The current position of the motor, in degrees (should be zero or close to it).
+            The absolute position of the motor, in degrees.
         '''
-        # get the position exactly
-        pos_resp = self._send_instruction(b'gp', require_resp_len=11, require_resp_code=b'po')
-        pos = int(pos_resp[3:11], 16)
-        # check negative
+        pos = resp[3:11]
+        # check if negative and take the two's compliment
+        pos = int(pos, 16)
         if (pos >> 31) & 1:
             # negative number, take the two's compliment
             pos = -((pos ^ 0xffffffff) + 1)
-        # get the new offset including current offset
-        new_offset = (self._get_home_offset() + pos) % self._travel
-
-        # check negative
-        if new_offset < 0:
-            # negative number, take the two's compliment
-            new_offset = -((new_offset ^ 0xffffffff) + 1)
-        # encode the new offset
-        new_offset_bytes = hex(new_offset)[2:].upper().encode('utf-8').zfill(8)
-        # send the new offset
-        self._send_instruction(b'so', data=new_offset_bytes)
-        # check the new position
-        return self._get_position()
+        return pos / self._ppmu
 
     # +++ private overridden methods +++
 
@@ -429,14 +413,18 @@ class ElliptecMotor(Motor):
         else:
             return f'UNKNOWN STATUS CODE {resp[3:5]}'
 
-    def _set_position(self, angle_degrees:float) -> float:
+    def _set_position(self, angle_degrees:float, block:bool=True) -> None:
         ''' Rotate the motor to an absolute position relative to home.
+
+        Note that Elliptec motors are so fast and always block until the move is complete.
 
         Parameters
         ----------
         angle_degrees : float
             The absolute angle to rotate to, in degrees.
-        
+        block : bool (optional, default=True)
+            Whether to block until the move is complete. 
+
         Returns
         -------
         float
@@ -445,60 +433,25 @@ class ElliptecMotor(Motor):
         # request the move
         resp = self._send_instruction(b'ma', self._degrees_to_bytes(angle_degrees, num_bytes=8), require_resp_len=11, require_resp_code=b'po')
         # requiring a response already blocks until done moving :)
-        # check response
-        return self._get_position(resp)
-
-    def _move_relative(self, angle_degrees:float) -> float:
-        ''' Rotate the motor to a position relative to the current one.
-
-        Parameters
-        ----------
-        angle_degrees : float
-            The angle to rotate, in degrees.
-        
-        Returns
-        -------
-        float
-            The ABSOLUTE angle in degrees that the motor was moved to. Likely will not be the same as the angle requested.
-        
-        Returns
-        -------
-        float
-            The absolute position of the motor after the move, in degrees.
-        '''
-        # request the move
-        resp = self._send_instruction(b'mr', self._degrees_to_bytes(angle_degrees, num_bytes=8), require_resp_len=11, require_resp_code=b'po')
-        # requiring a response already blocks until done moving :)
-        return self._get_position(resp)
+        self._hardware_pos = self._decode_position(resp)
 
     def _is_active(self) -> bool:
         ''' Check if the motor is active by querying the status. '''
-        resp = self._send_instruction(b'i1', require_resp_len=24, require_resp_code=b'i1')
-        return resp[4] != 48 # zero in ASCII
+        # for elliptec motors, all move commands block until complete
+        return False
 
-    def _get_position(self, resp:bytes=None) -> float:
-        ''' Get the current position of the motor in degrees.
-        
-        Parameters
-        ----------
-        resp, optional
-            The response from the device to parse. If none, device will be queried.
-        
-        Returns
-        -------
-        float
-            The absolute position of the motor, in degrees.
-        '''
-        # if no response is provided, query the device
-        if resp is None:
-            resp = self._send_instruction(b'gp', require_resp_len=11, require_resp_code=b'po')
+    def _update_position(self) -> None:
+        ''' Update the current position of the motor in local memory. '''
+        # query device
+        resp = self._send_instruction(b'gp', require_resp_len=11, require_resp_code=b'po')
+        # extract position
         pos = resp[3:11]
         # check if negative and take the two's compliment
         pos = int(pos, 16)
         if (pos >> 31) & 1:
             # negative number, take the two's compliment
             pos = -((pos ^ 0xffffffff) + 1)
-        return pos / self._ppmu
+        self._hardware_pos = pos / self._ppmu
 
 class ThorLabsMotor(Motor):
     ''' ThorLabs Motor class.
@@ -530,57 +483,45 @@ class ThorLabsMotor(Motor):
         ''' Returns true if the motor is actively moving, false otherwise. '''
         return self.motor_apt.is_in_motion
 
-    def _move_relative(self, angle_degrees:float) -> float:
-        ''' Rotates the motor by a relative angle.
-
-        Parameters
-        ----------
-        angle_degrees : float
-            The angle to rotate by, in degrees.
-        
-        Returns
-        -------
-        float
-            The absolute position of the motor after the move, in degrees.
-        '''
-        # convert to degrees and send instruction
-        self.motor_apt.move_relative(angle_degrees)
-        # (maybe) wait for move to finish
-        while self._is_active():
-            sleep(0.1)
-        # return the position reached
-        return self._get_position()
-
-    def _set_position(self, angle_degrees:float,) -> float:
+    def _set_position(self, angle_degrees:float, block:bool=True) -> None:
         ''' Rotates the motor to an absolute angle.
 
         Parameters
         ----------
         angle_degrees : float
             The angle to rotate by, in degrees.
+        block : bool (optional, default=True)
+            Whether or not to block until the move is complete.
         
         Returns
         -------
         float
-            The absolute position of the motor after the move, in degrees.
+            The absolute position of the motor after the move, in degrees (if blocking).
+        
+        or
+
+        None
+            If non-blocking.
         '''
         # convert to degrees and send instruction
         self.motor_apt.move_to(angle_degrees)
-        # (maybe) wait for move to finish
+        # exit if non blocking
+        if not block: return None
+        # otherwise wait for move to finish
         while self._is_active():
-            sleep(0.1)
-        # return the current position
-        return self._get_position()
+            sleep(0.05)
+        # update the current position
+        self._update_position()
 
-    def _get_position(self) -> float:
+    def _update_position(self) -> float:
         ''' Get the position of the motor.
-        
+                
         Returns
         -------
         float
             The position of the motor, in degrees.
         '''
-        return self.motor_apt.position
+        self._hardware_pos = self.motor_apt.position
 
 # motor types dictionary
 MOTOR_DRIVERS = {
