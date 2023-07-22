@@ -10,7 +10,7 @@ Author(s)
 '''
 
 # python imports
-from typing import Union, List
+from typing import Union, List, Tuple
 import functools as ft
 import struct
 import serial
@@ -61,6 +61,7 @@ class SerialMonitor:
         self._term_seq = termination_seq
         self._ignore = ignore
         self._rate_data = rate_data
+        self._active_request = None
 
         # put plot vars in terms of update period
         self._plot_smoothing = max(int(plot_smoothing/self._update_period), 1)
@@ -88,18 +89,15 @@ class SerialMonitor:
     def __str__(self) -> str:
         return self.__repr__()
 
-    # +++ CLEANUP +++
-    
-    def shutdown(self) -> None:
-        ''' Terminates the listening process, closes the serial connections, and closes the plot. '''
-        # send close notice
-        self._main_pipe.send('close')
-        # close the pipe
-        self._main_pipe.close()
-        # wait for the process to close
-        self._listener.join()
-        # close the plot
-        plt.close()
+    # +++ PROPERTIES +++
+
+    @property
+    def channels(self) -> List[str]:
+        return self._channel_keys
+
+    @property
+    def num_chan(self) -> int:
+        return self._num_chan
 
     # +++ SERIAL INTERFACING +++
 
@@ -213,7 +211,31 @@ class SerialMonitor:
 
     # +++ PUBLIC METHODS +++
 
-    def acquire_data(self, num_samp:int, samp_period:float) -> np.ndarray:
+    def request_data(self, num_samp:int, samp_period:float) -> None:
+        ''' Sends a request for the SerialMonitor to collect data.
+
+        This method only sends the request for data to be collected and is non-blocking. After calling, you should use the acquire_data method to return the data.
+
+        Parameters
+        ----------
+        num_samp : int
+            The number of samples to take from the data.
+        samp_period : float
+            How long to sample the data per sample. Note that this will be rounded to the nearest multiple of the update period.
+        '''
+        # check for an active request
+        if self._active_request is not None:
+            raise RuntimeError(f'Received a request for data "{(num_samp, samp_period)}" while an active request "{self._active_request}" is still being processed.')
+        # sample period # of data points
+        samp_period = max(int(samp_period / self._update_period), 1)
+        # total number of data points needed
+        num_data = num_samp * samp_period
+        # send a request for all the data
+        self._main_pipe.send(num_data)
+        # set the active request variable
+        self._active_request = (num_samp, samp_period)
+
+    def acquire_data(self) -> Tuple[np.ndarray, np.ndarray]:
         ''' Acquires the data from this SerialMonitor's connection.
 
         Parameters
@@ -227,13 +249,16 @@ class SerialMonitor:
         -------
         np.ndarray (num_chan,)
             The data from the SerialMonitor's connection.
+        np.ndarray (num_chan,)
+            The uncertainties in the data from the SerialMonitor's connection.
         '''
-        # sample period # of data points
-        samp_period = max(int(samp_period / self._update_period), 1)
-        # total number of data points needed
+        # check active request
+        if self._active_request is None:
+            raise RuntimeError('Attempted to acquire data without an active request.')
+        
+        # unpack active request
+        num_samp, samp_period = self._active_request
         num_data = num_samp * samp_period
-        # send a request for all the data
-        self._main_pipe.send(num_data)
 
         # wait for data
         data_out = []
@@ -256,6 +281,19 @@ class SerialMonitor:
         
         # return the means and SEMs
         return data_avgs, data_sems
+
+    # +++ CLEANUP +++
+    
+    def shutdown(self) -> None:
+        ''' Terminates the listening process, closes the serial connections, and closes the plot. '''
+        # send close notice
+        self._main_pipe.send('close')
+        # close the pipe
+        self._main_pipe.close()
+        # wait for the process to close
+        self._listener.join()
+        # close the plot
+        plt.close()
 
 # ccu class
 
