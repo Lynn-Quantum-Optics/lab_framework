@@ -36,45 +36,137 @@ class Manager:
     ----------
     config : str, optional
         The name of the configuration file to load. Defaults to 'config.json'.
-    debug : bool, optional
-        If True, the CCU and motors will not be initialized with the manager, and will have to be initialized later with the init_ccu and init_motors methods.
+    motors : bool, optional (default=True)
+        Initialize motors?
+    ccu : bool, optional (default=True)
+        Initialize CCU?
+    laser : bool, optional (default=True)
+        Initialize laser?
+    debug : bool, optional (default=False)
+        If True, do not initialize any equipment. Useful for debugging. All not initialized equiptment can still be initialized via init_motors, init_ccu, and init_laser.
+    verbose : bool, optional (default=True)
+        If True, print all log messages to output.
     '''
-    def __init__(self, config:str='config.json', debug:bool=False):
+    def __init__(self, config:str='config.json', motors:bool=False, ccu:bool=False, laser:bool=False, debug:bool=False, verbose:bool=True):
         # get the time of initialization for file naming
         self._init_time = time.time()
         self._init_time_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-        # load configuration file
-        with open(config, 'r') as f:
-            self._config = json.load(f)
-        
-        # save all initilaization parameters
-        self.config_file = config
-
-        # initialize output file variables
-        self._output_data = {x:[] for x in self.df_columns} # initialize the output data
-
-        # initialize ccu and motor class variables
-        self._ccu = None
-        self._motors = None
-        self._active_ports = {}
-        self.data = None # output data holding
+        # initialize the log file
+        removed_log = False
+        if os.path.isfile('./mlog.txt'):
+            removed_log = True
+            os.remove('./mlog.txt')
 
         # initialize the log file
-        if os.path.isfile('./mlog.txt'):
-            os.remove('./mlog.txt')
         self._log_file = open('./mlog.txt', 'w+')
-        self.log(f'Manager started at {self._init_time_str}.')
-        self.log(f'Configuration file: "{config}".')
+        self._verb = verbose
+        self.log(f'Manager started at {self._init_time_str}.', self._verb)
+        if removed_log: self.log('Removed old log file.', self._verb)
+        self.log(f'Configuration file: "{config}".', self._verb)
 
-        # intialize everything if not debugging
+        # check config path
+        if not os.path.isfile(config):
+            self.log(f'Configuration file "{config}" does not exist.', self._verb)
+            self.shutdown()
+            raise ValueError(f'Configuration file "{config}" does not exist.')
+        
+        # load the configuration file
+        self.log('Loading configuration file.', self._verb)
+        with open(config, 'r') as f:
+            self._config = json.load(f)
+
+        # initialize ccu, motor, and laser
+        self._ccu = None
+        self._motors = []
+        self._laser = None
         if not debug:
-            self.init_ccu()
-            self.init_motors()
+            if motors: self.init_motors()
+            if ccu: self.init_ccu()
+            if laser: self.init_laser()
+
+        # initialize output file variables
+        self._output_data = pd.DataFrame(columns=self.df_columns)
 
     # +++ class variabes +++
 
     MAIN_CHANNEL = 'C4' # the main coincidence counting channel key for any preset basis
+
+    # +++ initialization methods +++
+
+    def init_ccu(self) -> None:
+        ''' Initialize the CCU which starts live plotting. '''
+        self.log('Beginning CCU initialization...', self._verb)
+
+        if self._ccu is not None:
+            self.log('CCU already initialized. Aborting initialization.', self._verb)
+            return
+
+        # initialize the ccu
+        try:
+            self._ccu = CCU(
+                port=self._config['ccu']['port'],
+                baud=self._config['ccu']['baudrate'],
+                plot_xlim=self._config['ccu'].get('plot_xlim', 60),
+                plot_smoothing=self._config['ccu'].get('plot_smoothing', 0.5),
+                channel_keys=self._config['ccu']['channel_keys'],
+                ignore=self._config['ccu'].get('ignore', []))
+        except Exception as e:
+            self.log(f'CCU ran into exception during initialization: {e}', self._verb)
+            self.shutdown()
+    
+    def init_motors(self) -> None:
+        ''' Initialize and connect to all motors. '''
+        self.log('Beginning motor initialization...', self._verb)
+
+        # intialize the active ports
+        self._active_ports = {}
+
+        if len(self._motors):
+            self.log('Motors already initialized, aborting initialization.', self._verb)
+            return
+
+        self._motors = list(self._config['motors'].keys())
+        self.log(f'Initializing motors from config: {", ".join(self._motors)}.', self._verb)
+
+        # loop to initialize all motors
+        for motor_name in self._motors:
+            # check name
+            if motor_name in self.__dict__ or not motor_name.isidentifier():
+                self.log(f'Motor initializer "{motor_name}" is invalid.', self._verb)
+                self.log('Aborting motor initialization.', self._verb)
+                self.shutdown_motors()
+                return
+            # get the motor arguments
+            motor_dict = copy.deepcopy(self._config['motors'][motor_name])
+            typ = motor_dict.pop('type')
+            # conncet to com ports for elliptec motors
+            if typ == 'Elliptec':
+                port = motor_dict.pop('port')
+                if port in self._active_ports:
+                    com_port = self._active_ports[port]
+                else:
+                    self.log(f'Connecting to com port "{port}".', self._verb)
+                    try:
+                        com_port = serial.Serial(port, timeout=5) # time out for all read
+                    except Exception as e:
+                        self.log(f'Failed to connect to com port "{port}": {e}', self._verb)
+                        self.shutdown_motors()
+                        return
+                    self._active_ports[port] = com_port
+                motor_dict['com_port'] = com_port
+            # initialize motor
+            try:
+                self.__dict__[motor_name] = MOTOR_DRIVERS[typ](name=motor_name, **motor_dict)
+            except Exception as e:
+                self.log(f'Failed to initialize motor "{motor_name}": {e}', self._verb)
+                self.shutdown_motors()
+                return
+        self.log('Motor initialization complete.')
+
+    def init_laser(self) -> None:
+        ''' Initializes laser monitor. '''
+        self.log('Laser module not operational.', self._verb)
 
     # +++ class methods +++
 
@@ -177,68 +269,32 @@ class Manager:
 
     @property
     def df_columns(self) -> str:
-        return ['start', 'stop', 'num_samp', 'samp_period'] + [k for k in self._config['motors'].keys()] + self._config['channel_keys'] + ['note']
+        out = ['start', 'stop', 'num_samp', 'samp_period']
+        out += self._motors
+        if self._ccu: out += self._ccu._channel_keys
+        if self._laser: out += self._laser._channel_keys
+        out += ['note']
+        return out
 
     @property
     def csv_columns(self) -> str:
-        return ['start', 'stop', 'num_samp', 'samp_period'] + [k for k in self._config['motors'].keys()] + self._config['channel_keys'] + [f'{k}_SEM' for k in self._config['channel_keys']] + ['note']
-
-    # +++ initialization methods +++
-
-    def init_ccu(self) -> None:
-        ''' Initialize the CCU which starts live plotting. '''
-        self.log('Initializing CCU.')
-
-        if self._ccu is not None:
-            self.log('CCU already initialized; throwing error.')
-            raise RuntimeError('CCU has already been initialized.')
-        
-        # initialize the ccu
-        self._ccu = CCU(
-            port=self._config['ccu']['port'],
-            baud=self._config['ccu']['baudrate'],
-            plot_xlim=self._config['ccu'].get('plot_xlim', 60),
-            plot_smoothing=self._config['ccu'].get('plot_smoothing', 0.5),
-            channel_keys=self._config['ccu']['channel_keys'],
-            ignore=self._config['ccu'].get('ignore', []))
-    
-    def init_motors(self) -> None:
-        ''' Initialize and connect to all motors. '''
-        self.log('Initializing motors.')
-
-        if not self._motors is None:
-            self.log('Motors already initialized, throwing error.')
-            raise RuntimeError('Motors have already been initialized.')
-
-        self._motors = list(self._config['motors'].keys())
-        
-        # loop to initialize all motors
-        for motor_name in self._motors:
-            # check name
-            if motor_name in self.__dict__ or not motor_name.isidentifier():
-                raise ValueError(f'Invalid motor name \"{motor_name}\" (may be duplicate, collision with Manager method, or invalid identifier).')
-            # get the motor arguments
-            motor_dict = copy.deepcopy(self._config['motors'][motor_name])
-            typ = motor_dict.pop('type')
-            # conncet to com ports for elliptec motors
-            if typ == 'Elliptec':
-                port = motor_dict.pop('port')
-                if port in self._active_ports:
-                    com_port = self._active_ports[port]
-                else:
-                    com_port = serial.Serial(port, timeout=5) # time out for all read
-                    self._active_ports[port] = com_port
-                motor_dict['com_port'] = com_port
-            # initialize motor
-            self.__dict__[motor_name] = MOTOR_DRIVERS[typ](name=motor_name, **motor_dict)
+        out = ['start', 'stop', 'num_samp', 'samp_period']
+        out += self._motors
+        if self._ccu: out += self._ccu._channel_keys
+        if self._ccu: out += [f'{k}_SEM' for k in self._ccu._channel_keys]
+        if self._laser: out += self._laser._channel_keys
+        if self._laser: out += [f'{k}_SEM' for k in self._laser._channel_keys]
+        out += ['note']
+        return out
 
     # +++ file management +++
 
     def reset_output(self) -> None:
         ''' Clear (erase) the data in the current output data frame. '''
-        self.log('Clearing output data.')
+        self.log('Clearing output data buffer.', self._verb)
+
         # just create a brand new output data frame
-        self._output_data = {x:[] for x in self.df_columns}
+        self._output_data = pd.DataFrame(columns=self.df_columns)
 
     def output_data(self, output_file:str=None, clear_data:bool=True) -> pd.DataFrame:
         ''' Saves the output data to a specified file csv file.
@@ -255,22 +311,23 @@ class Manager:
         pd.DataFrame
             The data being output.
         '''
-        # put the output data into a dataframe
-        df = pd.DataFrame(self._output_data)
 
         # create the csv dataframe and save to the output file
         if output_file is not None:
-            self.log(f'Saving data to "{output_file}".')
-            csv_df = Manager.reformat_ufloat_to_float(df)
+            self.log(f'Saving data to "{output_file}".', self._verb)
+            csv_df = Manager.reformat_ufloat_to_float(self._output_data)
             csv_df = csv_df[self.csv_columns]
             csv_df.to_csv(output_file, index=False)
         
+        # create a copy of the data to return
+        df = self._output_data.copy()
+
         # clear the output data
         if clear_data:
             self.reset_output()
         
         # return the dataframe
-        return df
+        return 
 
     # +++ methods +++
 
@@ -301,37 +358,53 @@ class Manager:
             If only one channel is specified, a single value is returned (e.g. ufloat for CCU data; str for time data; float for motor position).
         '''
         # log the data taking
-        self.log(f'Taking data; sampling {num_samp} x {samp_period} s.')
+        row = len(self._output_data)
+        self.log(f'Taking data for row {row}; sampling {num_samp} x {samp_period} s.', self._verb)
         
         # check for note to log
         if note != "":
-            self.log(f'\tNote: "{note}"')
+            self.log(f'\tNote: "{note}"', self._verb)
         else:
             note = ""
+
+        # add basic info data to the output
+        self._output_data.at[row, 'num_samp'] = num_samp
+        self._output_data.at[row, 'samp_period'] = samp_period
+        self._output_data.at[row, 'note'] = note
         
         # record all motor positions
         for m in self._motors:
-            self._output_data[m].append(self.__dict__[m].pos)
+            self._output_data.at[row, m] = self.__dict__[m].pos
         
         # record start time
-        start_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        self._output_data.at[row, 'start'] = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-        # run trials
-        ccu_data = unp.uarray(*self._ccu.acquire_data(num_samp, samp_period))
+        # send data requests
+        if self._ccu:
+            self.log('Requesting CCU data...', self._verb)
+            self._ccu.request_data(num_samp, samp_period)
+        if self._laser:
+            self.log('Requesting Laser data...', self._verb)
+            self._laser.request_data(num_samp, samp_period)
+
+        # collect data
+        if self._ccu:
+            self.log('Receiving CCU data...', self._verb)
+            ccu_data = unp.uarray(*self._ccu.acquire_data())
+        if self._laser:
+            self.log('Receiving Laser data...', self._verb)
+            laser_data = unp.uarray(*self._laser.acquire_data())
         
         # record stop time
-        stop_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-
-        # add basic info data to the output
-        self._output_data['start'].append(start_time)
-        self._output_data['stop'].append(stop_time)
-        self._output_data['num_samp'].append(num_samp)
-        self._output_data['samp_period'].append(samp_period)
-        self._output_data['note'].append(note)
+        self._output_data.at[row, 'stop'] = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
         # add ccu data to the output
-        for k, v in zip(self._ccu._channel_keys, ccu_data):
-            self._output_data[k].append(v)
+        if self._ccu:
+            for k, v in zip(self._ccu.channels, ccu_data):
+                self._output_data.at[row, k] = v
+        if self._laser:
+            for k, v in zip(self._laser.channels, laser_data):
+                self._output_data.at[row, k] = v
 
         # put together the output
         if len(keys) == 0:
@@ -341,14 +414,24 @@ class Manager:
         else:
             return np.array(self._output_data[k][-1] for k in keys)
 
-    def log(self, note:str):
+    def log(self, note:str, print_note:bool=True) -> None:
         ''' Log a note to the manager's log file.
 
         All notes in the file are timestamped from the manager's initialization.
+
+        Parameters
+        ----------
+        note : str
+            The note to log.
+        print_note : bool, optional (default True)
+            If True, the note will also be printed to the console.
         '''
         line = self.time + f'\t{note}'
-        print(line)
-        self._log_file.write(line + '\n')
+        if not self._log_file.closed:
+            self._log_file.write(line + '\n')
+            if print_note: print(line)
+        else:
+            print(f'WARNING: Log file is closed. Cannot log "{line}".')
 
     def configure_motors(self, **kwargs) -> List[float]:
         ''' Configure the position of multiple motors at a time
@@ -363,20 +446,31 @@ class Manager:
         list[float]
             The actual positions of the motors after the move, in the order provided.
         '''
-        out = []
-        # loop to configure each motor individually
+        # loop to ask each motor to move
         for motor_name, position in kwargs.items():
-            out.append(self.configure_motor(motor_name, position))
+            if not motor_name in self._motors:
+                self.log(f'Asked to move unknown motor "{motor_name}" to {position} degrees. Skipping.', self._verb)
+                continue
+            self.log(f'Moving motor "{motor_name}" to {position} degrees.', self._verb)
+            self.__dict__[motor_name].goto(position, block=False)
+        # loop to wait for each motor to finish
+        out = []
+        for motor_name in kwargs:
+            if not motor_name in self._motors:
+                continue
+            p = self.__dict__[motor_name].pos
+            self.log(f'Motor "{motor_name}" moved to {p} degrees.', self._verb)
+            out.append(p)
         return out
 
-    def configure_motor(self, motor:str, pos:float) -> float:
+    def configure_motor(self, motor:str, position:float) -> float:
         ''' Configure a single motor using a string key.
         
         Parameters
         ----------
         motor : str
             The name of the motor, provided as a string.
-        pos : float
+        position : float
             The target position for the motor in degrees.
         
         Returns
@@ -385,9 +479,13 @@ class Manager:
             The actual position of the motor after the move.
         '''
         if not motor in self._motors:
-            self.log(f'Unknown motor "{motor}"; throwing error.')
-            raise ValueError(f'Attempted to reference unknown motor "{motor}".')
-        return self.__dict__[motor].goto(pos)
+            self.log(f'Asked to move unknown motor "{motor}" to {position} degrees. Skipping.', self._verb)
+            return 0
+        self.log(f'Moving motor "{motor}" to {position} deg.', self._verb)
+        self.__dict__[motor].goto(position)
+        out = self.__dict__[motor].pos
+        self.log(f'Motor "{motor}" moved to {out} deg.', self._verb)
+        return out
 
     def meas_basis(self, basis:str) -> None:
         ''' Set the measurement basis for Alice and Bob's half and quarter wave plates. 
@@ -455,39 +553,70 @@ class Manager:
         return positions, np.array(out)
 
     # +++ shutdown methods +++
+    def shutdown_motors(self) -> None:
+        ''' Shuts down all the motors, returning them to their home positions and closing connections with them. '''
+        self.log('Shutting down motors.')
 
-    def shutdown(self) -> None:
-        ''' Shutsdown all the motors and terminates CCU processes, closing all com ports.
-        '''
-        self.log('Beginning shutdown procedure.')
-        # motors
         if len(self._motors) == 0:
-            self.log('WARNING: No motors are active.')
+            self.log('NOTE: No motors are active.',self._verb)
         else:
             # loop to delete motors
-            self.log('Shutting down motor objects.')
             for motor_name in self._motors:
+                # check that it exists
+                if motor_name not in self.__dict__:
+                    self.log(f'WARNING: Motor "{motor_name}" not found in manager variables. Skipping.', self._verb)
+                    continue
+                self.log(f'Shutting down {motor_name}.',self._verb)
                 # get the motor object
                 motor = self.__dict__[motor_name]
                 # return to home position
                 motor.hardware_home()
-                self.log(f'{motor.name} returned to true position {motor.true_position} degrees.')
-                self.log(f'Deleting {motor.name} object.')
+                self.log(f'{motor.name} returned to true position {motor.true_position} degrees.',self._verb)
+                self.log(f'Deleting {motor.name} object.',self._verb)
                 del self.__dict__[motor_name]
+
         # com ports
         if len(self._active_ports) == 0:
-            self.log('WARNING: No com ports are active.')
+            self.log('NOTE: No com ports are active.', self._verb)
         else:
             # loop to shutdown ports
-            self.log('Closing COM ports.')
             for port in self._active_ports.values():
+                self.log(f'Closing COM port: {port}.', self._verb)
                 port.close()
+
+    def shutdown_ccu(self) -> None:
+        ''' Shutdown the CCU subprocess. '''
+        self.log('Shutting down CCU.')
+        if self._ccu:
+            self._ccu.shutdown()
+            self._ccu = None
+            self.log('CCU shutdown complete.')
+        else:
+            self.log('NOTE: No CCU active.', self._verb)
+
+    def shutdown_laser(self) -> None:
+        ''' Shutdown the laser subprocess. '''
+        self.log('Shutting down laser.')
+        if self._laser:
+            self._laser.shutdown()
+            self._laser = None
+            self.log('Laser shutdown complete.')
+        else:
+            self.log('NOTE: No laser active.', self._verb)
+
+    def shutdown(self) -> None:
+        ''' Shutsdown all the motors and terminates CCU processes, closing all com ports.
+        '''
+        self.log('Beginning shutdown procedure.', self._verb)
+        
+        self.shutdown_motors()
+        self.shutdown_ccu()
+        self.shutdown_laser()
+
         # output data
         if len(self._output_data['start']) != 0:
             self.log(f'WARNING: Shutting down with {len(self._output_data["start"])} rows of (potentially) unsaved data.')
-        # CCU
-        self.log('Closing CCU.')
-        self._ccu.shutdown()
+
         # log file
         self.log('Closing log file.')
         self._log_file.close()
