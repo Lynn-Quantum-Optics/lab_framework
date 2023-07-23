@@ -343,7 +343,24 @@ class Manager:
         # return the dataframe
         return df
 
-    # +++ methods +++
+    def log(self, note:str, print_note:bool=True) -> None:
+        ''' Log a note to the manager's log file.
+
+        All notes in the file are timestamped from the manager's initialization.
+
+        Parameters
+        ----------
+        note : str
+            The note to log.
+        print_note : bool, optional (default True)
+            If True, the note will also be printed to the console.
+        '''
+        line = self.time + f'\t{note}'
+        if not self._log_file.closed:
+            self._log_file.write(line + '\n')
+            if print_note: print(line)
+        else:
+            print(f'WARNING: Log file is closed. Cannot log "{line}".')
 
     def take_data(self, num_samp:int, samp_period:float, *keys:str, note:str="") -> Union[np.ndarray, ucore.Variable, str, float, int]:
         ''' Take detector data
@@ -430,24 +447,43 @@ class Manager:
         else:
             return np.array(self._output_data[k][-1] for k in keys)
 
-    def log(self, note:str, print_note:bool=True) -> None:
-        ''' Log a note to the manager's log file.
-
-        All notes in the file are timestamped from the manager's initialization.
-
+    def sweep(self, component:str, pos_min:float, pos_max:float, num_steps:int, num_samp:int, samp_period:float) -> Tuple[np.ndarray, np.ndarray]:
+        ''' Sweeps a component of the setup while collecting data
+        
         Parameters
         ----------
-        note : str
-            The note to log.
-        print_note : bool, optional (default True)
-            If True, the note will also be printed to the console.
+        component : str
+            The name of the component to sweep. Must be a motor name.
+        pos_min : float
+            The minimum position to sweep to, in degrees.
+        pos_max : float
+            The maximum position to sweep to, in degrees.
+        num_steps : int
+            The number of steps to perform over the specified range.
+        num_samp : int
+            Number of samples to take at each step.
+        samp_period : float
+            The period of each sample, in seconds (rounds down to nearest 0.1s, min 0.1s).
+        
+        Returns
+        -------
+        np.ndarray
+            Coincidence count rates over the sweep.
+        np.ndarray
+            Uncertainties in said coincidence count rates.
         '''
-        line = self.time + f'\t{note}'
-        if not self._log_file.closed:
-            self._log_file.write(line + '\n')
-            if print_note: print(line)
-        else:
-            print(f'WARNING: Log file is closed. Cannot log "{line}".')
+        self.log(f'Sweeping {component} from {pos_min} to {pos_max} degrees in {num_steps} steps.')
+        # open output
+        out = []
+        # loop to perform the sweep
+        positions = np.linspace(pos_min, pos_max, num_steps)
+        for pos in tqdm(positions):
+            self.configure_motor(component, pos)
+            x = self.take_data(num_samp, samp_period, Manager.MAIN_CHANNEL)
+            out.append(x)
+        return positions, np.array(out)
+
+    # +++ experimental setup +++
 
     def configure_motors(self, **kwargs) -> List[float]:
         ''' Configure the position of multiple motors at a time
@@ -531,42 +567,6 @@ class Manager:
         # setup the state
         self.log(f'Loading state preset "{state}" from config file -> {self._config["state_presets"][state]}.')
         self.configure_motors(**self._config['state_presets'][state])
-
-    def sweep(self, component:str, pos_min:float, pos_max:float, num_steps:int, num_samp:int, samp_period:float) -> Tuple[np.ndarray, np.ndarray]:
-        ''' Sweeps a component of the setup while collecting data
-        
-        Parameters
-        ----------
-        component : str
-            The name of the component to sweep. Must be a motor name.
-        pos_min : float
-            The minimum position to sweep to, in degrees.
-        pos_max : float
-            The maximum position to sweep to, in degrees.
-        num_steps : int
-            The number of steps to perform over the specified range.
-        num_samp : int
-            Number of samples to take at each step.
-        samp_period : float
-            The period of each sample, in seconds (rounds down to nearest 0.1s, min 0.1s).
-        
-        Returns
-        -------
-        np.ndarray
-            Coincidence count rates over the sweep.
-        np.ndarray
-            Uncertainties in said coincidence count rates.
-        '''
-        self.log(f'Sweeping {component} from {pos_min} to {pos_max} degrees in {num_steps} steps.')
-        # open output
-        out = []
-        # loop to perform the sweep
-        positions = np.linspace(pos_min, pos_max, num_steps)
-        for pos in tqdm(positions):
-            self.configure_motor(component, pos)
-            x = self.take_data(num_samp, samp_period, Manager.MAIN_CHANNEL)
-            out.append(x)
-        return positions, np.array(out)
 
     # +++ shutdown methods +++
     def shutdown_motors(self) -> None:
