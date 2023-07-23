@@ -476,12 +476,12 @@ class Manager:
         # open output
         out = []
         # loop to perform the sweep
-        positions = np.linspace(pos_min, pos_max, num_steps)
-        for pos in tqdm(positions):
-            self.configure_motor(component, pos)
+        angles = []
+        for pos in tqdm(np.linspace(pos_min, pos_max, num_steps)):
+            angles.append(self.configure_motor(component, pos))
             x = self.take_data(num_samp, samp_period, Manager.MAIN_CHANNEL)
             out.append(x)
-        return positions, np.array(out)
+        return angles, np.array(out)
 
     # +++ experimental setup +++
 
@@ -569,6 +569,7 @@ class Manager:
         self.configure_motors(**self._config['state_presets'][state])
 
     # +++ shutdown methods +++
+    
     def shutdown_motors(self) -> None:
         ''' Shuts down all the motors, returning them to their home positions and closing connections with them. '''
         self.log('Shutting down motors.')
