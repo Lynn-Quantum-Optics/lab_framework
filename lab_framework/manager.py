@@ -347,9 +347,9 @@ class Manager:
         num_samp : int
             Number of samples to take.
         samp_period : float
-            Collection time for each sample, in seconds. Note that this will be rounded to the nearest 0.1 seconds (minimum 0.1 seconds).
+            Collection time for each sample, in seconds. Note that this will be rounded to the nearest multiple of each SerialMonitor's update period (0.1 seconds).
         *keys : str
-            Any channel keys (probably CCU keys, but any are allowed) to return data for. If no keys are given, all rates will be returned.
+            Any channel keys (probably CCU keys, for example 'C4', but any are allowed) to return data for. If no keys are given, all rates will be returned.
         note : str, optional (default "")
             A note can be provided to be written to this row in the output table which can help you remember why you took this data.
         
