@@ -76,6 +76,9 @@ class Manager:
         with open(config, 'r') as f:
             self._config = json.load(f)
 
+        # initialize main channel variable
+        self._default_channels = self._config['default_channels']
+
         # initialize ccu, motor, and laser
         self._ccu = None
         self._motors = []
@@ -290,6 +293,11 @@ class Manager:
         out += ['note']
         return out
 
+    @property
+    def default_channels(self) -> Union[List[str], str]:
+        ''' The default channels for take_data. '''
+        return self._default_channels if len(self._default_channels) != 1 else self._default_channels[0]
+
     # +++ file management +++
 
     def reset_output(self) -> None:
@@ -349,7 +357,7 @@ class Manager:
         samp_period : float
             Collection time for each sample, in seconds. Note that this will be rounded to the nearest multiple of each SerialMonitor's update period (0.1 seconds).
         *keys : str
-            Any channel keys (probably CCU keys, for example 'C4', but any are allowed) to return data for. If no keys are given, all rates will be returned.
+            Any channel keys (probably CCU keys, for example 'C4', but any are allowed) to return data for. If no keys are given, all rates will be returned. Defaults to default_channels.
         note : str, optional (default "")
             A note can be provided to be written to this row in the output table which can help you remember why you took this data.
         
@@ -410,7 +418,11 @@ class Manager:
             for k, v in zip(self._laser.channels, laser_data):
                 self._output_data.at[row, k] = v
 
-        # put together the output
+        # use default channels?
+        if len(keys) == 0:
+            keys = self.default_channels
+
+        # return requested data
         if len(keys) == 0:
             return None
         elif len(keys) == 1:
@@ -551,7 +563,7 @@ class Manager:
         # loop to perform the sweep
         positions = np.linspace(pos_min, pos_max, num_steps)
         for pos in tqdm(positions):
-            self.configure_motors(**{component:pos})
+            self.configure_motor(component, pos)
             x = self.take_data(num_samp, samp_period, Manager.MAIN_CHANNEL)
             out.append(x)
         return positions, np.array(out)
