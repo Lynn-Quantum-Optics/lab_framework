@@ -1,5 +1,5 @@
 {   
-    "channel_keys": ["A", "B", "Ap", "Bp", "C4", "C5", "C6", "C7"],
+    "default_channels": ["C4"],
     "ccu": {
         "port": "COM4",
         "baudrate": 19200,
