@@ -260,15 +260,17 @@ class Manager:
     
     @property
     def time(self) -> str:
-        ''' String time since initalizing the manager, rounded to the nearest second. '''
+        ''' String time since initalizing the manager, like "hh:mm:ss". '''
         return str(datetime.timedelta(seconds=int(time.time()-self._init_time)))
     
     @property
     def now(self) -> str:
+        ''' The current date and time like "YYYY.MM.DD hh:mm:ss".'''
         return datetime.datetime.now().strftime("%Y.%m.%d %H:%M:%S")
 
     @property
-    def df_columns(self) -> str:
+    def df_columns(self) -> List[str]:
+        ''' The columns of output data frames. '''
         out = ['start', 'stop', 'num_samp', 'samp_period']
         out += self._motors
         if self._ccu: out += self._ccu._channel_keys
@@ -277,7 +279,8 @@ class Manager:
         return out
 
     @property
-    def csv_columns(self) -> str:
+    def csv_columns(self) -> List[str]:
+        ''' The columns of output csv files. '''
         out = ['start', 'stop', 'num_samp', 'samp_period']
         out += self._motors
         if self._ccu: out += self._ccu._channel_keys
@@ -291,7 +294,7 @@ class Manager:
 
     def reset_output(self) -> None:
         ''' Clear (erase) the data in the current output data frame. '''
-        self.log('Clearing output data buffer.', self._verb)
+        self.log('Clearing output data.', self._verb)
 
         # just create a brand new output data frame
         self._output_data = pd.DataFrame(columns=self.df_columns)
