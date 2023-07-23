@@ -317,9 +317,12 @@ class Manager:
 
         # create the csv dataframe and save to the output file
         if output_file is not None:
+            if os.path.isfile(output_file):
+                self.log(f'Output file "{output_file}"already exists. Overwriting data.', self._verb)
+                os.remove(output_file)
             self.log(f'Saving data to "{output_file}".', self._verb)
             csv_df = Manager.reformat_ufloat_to_float(self._output_data)
-            csv_df = csv_df[self.csv_columns]
+            csv_df = csv_df[self.csv_columns] # reorder columns
             csv_df.to_csv(output_file, index=False)
         
         # create a copy of the data to return
@@ -330,7 +333,7 @@ class Manager:
             self.reset_output()
         
         # return the dataframe
-        return 
+        return df
 
     # +++ methods +++
 
