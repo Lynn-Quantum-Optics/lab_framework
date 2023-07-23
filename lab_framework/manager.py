@@ -370,8 +370,6 @@ class Manager:
         # check for note to log
         if note != "":
             self.log(f'\tNote: "{note}"', self._verb)
-        else:
-            note = ""
 
         # add basic info data to the output
         self._output_data.at[row, 'num_samp'] = num_samp
