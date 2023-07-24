@@ -238,13 +238,6 @@ class SerialMonitor:
     def acquire_data(self) -> Tuple[np.ndarray, np.ndarray]:
         ''' Acquires the data from this SerialMonitor's connection.
 
-        Parameters
-        ----------
-        num_samp : int
-            The number of samples to take from the data.
-        samp_period : float
-            How long to sample the data per sample. Note that this will be rounded to the nearest multiple of the update period.
-
         Returns
         -------
         np.ndarray (num_chan,)
@@ -310,7 +303,7 @@ class CCU(SerialMonitor):
     plot_xlim : float
         The x limit for the plot (in seconds).
     plot_smoothing : float
-        The smoothing factor for the plot (between 0 and 1).
+        How often data from the plot should be smoothed (in seconds). Also effectively the plot update period.
     ignore : list[str]
         Any channels that should be ignored.
     '''
@@ -611,6 +604,3 @@ class Laser(SerialMonitor):
         
         # flush events
         self._fig.canvas.flush_events()
-
-if __name__ == '__main__':
-    l = Laser('COM10', 9600, 60, 0.5)
