@@ -569,13 +569,44 @@ class Manager:
         self.configure_motors(**self._config['state_presets'][state])
 
     # +++ shutdown methods +++
-    
+
+    def home_motors(self) -> None:
+        ''' Homes all motors in an error-safe environment. '''
+        self.log('Homing all motors.')
+        # check motors
+        if len(self._motors) == 0:
+            self.log('NOTE: No motors are active. Skipping.', self._verb)
+        else:
+            for motor_name in self._motors:
+                # check that it exists
+                if motor_name not in self.__dict__:
+                    self.log(f'WARNING: Motor "{motor_name}" not found in manager variables. Skipping.', self._verb)
+                    continue
+                # get the motor object
+                motor = self.__dict__[motor_name]
+                # attempt to home the motor
+                try:
+                    # home the motor
+                    self.log(f'Homing {motor.name}.',self._verb)
+                    motor.hardware_home()
+                    self.log(f'{motor.name} returned to hardware position {motor.hardware_pos} degrees.', self._verb)
+                except Exception as e:
+                    # relay exception to log
+                    self.log(f'Exception encountered while homing {motor_name}: {e}', self._verb)
+                    self.log(f'Skipping homing {motor_name}.', self._verb)
+                    continue
+
     def shutdown_motors(self) -> None:
         ''' Shuts down all the motors, returning them to their home positions and closing connections with them. '''
+        
+        # start by homing the motors
+        self.home_motors()
+
+        # shutdown the motors
         self.log('Shutting down motors.')
 
         if len(self._motors) == 0:
-            self.log('NOTE: No motors are active.',self._verb)
+            self.log('NOTE: No motors are active. Skipping.', self._verb)
         else:
             # loop to delete motors
             for motor_name in self._motors:
@@ -583,13 +614,7 @@ class Manager:
                 if motor_name not in self.__dict__:
                     self.log(f'WARNING: Motor "{motor_name}" not found in manager variables. Skipping.', self._verb)
                     continue
-                self.log(f'Shutting down {motor_name}.',self._verb)
-                # get the motor object
-                motor = self.__dict__[motor_name]
-                # return to home position
-                motor.hardware_home()
-                self.log(f'{motor.name} returned to true position {motor.true_position} degrees.',self._verb)
-                self.log(f'Deleting {motor.name} object.',self._verb)
+                self.log(f'Deleting {motor_name}.', self._verb)
                 del self.__dict__[motor_name]
 
         # com ports
