@@ -207,8 +207,7 @@ class Motor:
         self._set_position(set_point, block=block)
 
         # return based on blocking
-        if not block:
-            self._hardware_pos = None
+        if self._hardware_pos is None:
             return None
         else:
             return self.pos
@@ -506,7 +505,9 @@ class ThorLabsMotor(Motor):
         # convert to degrees and send instruction
         self.motor_apt.move_to(angle_degrees)
         # exit if non blocking
-        if not block: return None
+        if not block:
+            self._hardware_pos = None
+            return None
         # otherwise wait for move to finish
         while self._is_active():
             sleep(0.05)
