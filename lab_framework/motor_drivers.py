@@ -211,16 +211,6 @@ class Motor:
             return None
         else:
             return self.pos
-
-    def zero(self) -> float:
-        ''' Returns this motor to it's zero position.
-        
-        Returns
-        -------
-        float
-            The position of the motor in degrees.
-        '''
-        return self.goto(0)
     
     def hardware_home(self, block:bool=True) -> Union[float, None]:
         ''' Returns this motor to it's home position as saved in the hardware's memory.
