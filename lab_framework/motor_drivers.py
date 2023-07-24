@@ -230,7 +230,13 @@ class Motor:
         None
             If non-blocking.
         '''
-        return self._set_position(0, block=block)
+        # move to zero position
+        self._set_position(0, block=block)
+        # return based on if hardware pos has been set
+        if self._hardware_pos:
+            return self.pos
+        else:
+            return None
 
 # subclasses of 
 
