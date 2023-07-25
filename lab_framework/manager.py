@@ -47,7 +47,7 @@ class Manager:
     verbose : bool, optional (default=True)
         If True, print all log messages to output.
     '''
-    def __init__(self, config:str='config.json', motors:bool=True, ccu:bool=True, laser:bool=True, debug:bool=False, verbose:bool=True):
+    def __init__(self, config:str='config.json', motors:bool=True, ccu:bool=True, laser:bool=False, debug:bool=False, verbose:bool=True):
         # get the time of initialization for file naming
         self._init_time = time.time()
         self._init_time_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -588,8 +588,11 @@ class Manager:
                 # get the motor object
                 motor = self.__dict__[motor_name]
                 # return to home position
-                motor.hardware_home()
-                self.log(f'{motor.name} returned to true position {motor.hardware_pos} degrees.',self._verb)
+                try:
+                    motor.hardware_home()
+                    self.log(f'{motor.name} returned to true position {motor.hardware_pos} degrees.',self._verb)
+                except Exception as e:
+                    self.log(f'Failed to return {motor_name} to home position. Exception raised: {e}', self._verb)
                 self.log(f'Deleting {motor.name} object.',self._verb)
                 del self.__dict__[motor_name]
 
@@ -599,8 +602,11 @@ class Manager:
         else:
             # loop to shutdown ports
             for port in self._active_ports.values():
-                self.log(f'Closing COM port: {port}.', self._verb)
-                port.close()
+                if port.isOpen():
+                    self.log(f'Closing COM port: {port}.', self._verb)
+                    port.close()
+                else:
+                    self.log(f'NOTE: COM port {port} already closed.', self._verb)
 
     def shutdown_ccu(self) -> None:
         ''' Shutdown the CCU subprocess. '''
