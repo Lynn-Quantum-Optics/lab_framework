@@ -589,7 +589,7 @@ class Manager:
                 motor = self.__dict__[motor_name]
                 # return to home position
                 motor.hardware_home()
-                self.log(f'{motor.name} returned to true position {motor.true_position} degrees.',self._verb)
+                self.log(f'{motor.name} returned to true position {motor.hardware_pos} degrees.',self._verb)
                 self.log(f'Deleting {motor.name} object.',self._verb)
                 del self.__dict__[motor_name]
 
