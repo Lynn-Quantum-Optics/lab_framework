@@ -47,7 +47,7 @@ class Manager:
     verbose : bool, optional (default=True)
         If True, print all log messages to output.
     '''
-    def __init__(self, config:str='config.json', motors:bool=False, ccu:bool=False, laser:bool=False, debug:bool=False, verbose:bool=True):
+    def __init__(self, config:str='config.json', motors:bool=True, ccu:bool=True, laser:bool=True, debug:bool=False, verbose:bool=True):
         # get the time of initialization for file naming
         self._init_time = time.time()
         self._init_time_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
