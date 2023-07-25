@@ -77,7 +77,7 @@ class Manager:
             self._config = json.load(f)
 
         # initialize main channel variable
-        self._default_channels = self._config['default_channels']
+        self._default_channels = self._config.get('default_channels', [])
 
         # initialize ccu, motor, and laser
         self._ccu = None
