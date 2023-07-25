@@ -141,6 +141,7 @@ class Manager:
                 self.shutdown_motors()
                 return
             # get the motor arguments
+            self.log(f'Initializing motor "{motor_name}".', self._verb)
             motor_dict = copy.deepcopy(self._config['motors'][motor_name])
             typ = motor_dict.pop('type')
             # conncet to com ports for elliptec motors
