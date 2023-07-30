@@ -448,6 +448,45 @@ class ElliptecMotor(Motor):
             pos = -((pos ^ 0xffffffff) + 1)
         self._hardware_pos = pos / self._ppmu
 
+    # +++ special public methods +++
+
+    def get_velocity(self) -> int:
+        ''' Get the velocity of the motor.
+
+        Returns
+        -------
+        int
+            The velocity of the motor, as a percentage of the maximum velocity.
+        '''
+        # send the instruction
+        resp = self._send_instruction(b'gv', require_resp_len=5, require_resp_code=b'gv')
+        # convert to base 10 int
+        return int(resp[-2:],16)
+    
+    def set_velocity(self, pct:int) -> bytes:
+        ''' Set the velocity of the motor.
+
+        Parameters
+        ----------
+        pct : int
+            The velocity to set, as a percentage of the maximum velocity.
+        
+        Returns
+        -------
+        bytes
+            The response from the device.
+        '''
+        # check velocity
+        if pct > 100 or pct < 0:
+            raise ValueError('Velocity must be between 0 and 100%.')
+        # print a warning for low velocity
+        if pct < 30:
+            print('WARNING: Velocity less than 30% may cause the motor to stall.')
+        # get the percent in a hex string
+        hexPct = hex(pct)[2:].upper()
+        # send the instruction
+        return self._send_instruction(b'sv', hexPct.encode('utf-8')) 
+
 class ThorLabsMotor(Motor):
     ''' ThorLabs Motor class.
     
