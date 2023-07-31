@@ -544,6 +544,7 @@ class ThorLabsMotor(Motor):
             self._hardware_pos = None
             return None
         # otherwise wait for move to finish
+        sleep(0.1) # wait 0.1s before checking activity
         while self._is_active():
             sleep(0.05)
         # update the current position

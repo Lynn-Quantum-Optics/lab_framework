@@ -47,7 +47,7 @@ class Manager:
     verbose : bool, optional (default=True)
         If True, print all log messages to output.
     '''
-    def __init__(self, config:str='config.json', motors:bool=False, ccu:bool=False, laser:bool=False, debug:bool=False, verbose:bool=True):
+    def __init__(self, config:str='config.json', motors:bool=True, ccu:bool=True, laser:bool=False, debug:bool=False, verbose:bool=True):
         # get the time of initialization for file naming
         self._init_time = time.time()
         self._init_time_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -77,7 +77,7 @@ class Manager:
             self._config = json.load(f)
 
         # initialize main channel variable
-        self._default_channels = self._config['default_channels']
+        self._default_channels = self._config.get('default_channels', [])
 
         # initialize ccu, motor, and laser
         self._ccu = None
@@ -141,6 +141,7 @@ class Manager:
                 self.shutdown_motors()
                 return
             # get the motor arguments
+            self.log(f'Initializing motor "{motor_name}".', self._verb)
             motor_dict = copy.deepcopy(self._config['motors'][motor_name])
             typ = motor_dict.pop('type')
             # conncet to com ports for elliptec motors
@@ -614,7 +615,16 @@ class Manager:
                 if motor_name not in self.__dict__:
                     self.log(f'WARNING: Motor "{motor_name}" not found in manager variables. Skipping.', self._verb)
                     continue
-                self.log(f'Deleting {motor_name}.', self._verb)
+                self.log(f'Shutting down {motor_name}.',self._verb)
+                # get the motor object
+                motor = self.__dict__[motor_name]
+                # return to home position
+                try:
+                    motor.hardware_home()
+                    self.log(f'{motor.name} returned to true position {motor.hardware_pos} degrees.',self._verb)
+                except Exception as e:
+                    self.log(f'Failed to return {motor_name} to home position. Exception raised: {e}', self._verb)
+                self.log(f'Deleting {motor.name} object.',self._verb)
                 del self.__dict__[motor_name]
 
         # com ports
@@ -623,8 +633,11 @@ class Manager:
         else:
             # loop to shutdown ports
             for port in self._active_ports.values():
-                self.log(f'Closing COM port: {port}.', self._verb)
-                port.close()
+                if port.isOpen():
+                    self.log(f'Closing COM port: {port}.', self._verb)
+                    port.close()
+                else:
+                    self.log(f'NOTE: COM port {port} already closed.', self._verb)
 
     def shutdown_ccu(self) -> None:
         ''' Shutdown the CCU subprocess. '''
